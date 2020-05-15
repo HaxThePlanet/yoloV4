@@ -12,11 +12,30 @@ from keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau, Ear
 from yolo4.model import preprocess_true_boxes, yolo4_body, yolo4_loss
 from yolo4.utils import get_random_data
 
+from keras.backend.tensorflow_backend import set_session
+
+import tensorflow as tf
+
+from keras.backend.tensorflow_backend import set_session
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.6
+set_session(tf.Session(config=config))
 
 def _main():
-    annotation_path = '2007_train.txt'
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError as e:
+            print(e)
+
+    #this is your xy annotations
+    annotation_path = 'data_train.txt'
     log_dir = 'logs/000/'
+    #this is your tags
     classes_path = 'model_data/voc_classes.txt'
+    #this is nothing but xy coords
     anchors_path = 'model_data/yolo4_anchors.txt'
     class_names = get_classes(classes_path)
     num_classes = len(class_names)
@@ -24,18 +43,17 @@ def _main():
 
     input_shape = (608,608) # multiple of 32, hw
 
-    model = create_model(input_shape, anchors, num_classes,
-        freeze_body=2, weights_path='yolo4_weight.h5') # make sure you know what you freeze
+    model = create_model(input_shape, anchors, num_classes, freeze_body=2, weights_path='yolo4_weight.h5') # make sure you know what you freeze
 
     logging = TensorBoard(log_dir=log_dir)
-    checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
-        monitor='val_loss', save_weights_only=True, save_best_only=True, period=1)
+    checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5', monitor='val_loss', save_weights_only=True, save_best_only=True, period=1)
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
 
     val_split = 0.1
     with open(annotation_path) as f:
         lines = f.readlines()
+
     np.random.seed(10101)
     np.random.shuffle(lines)
     np.random.seed(None)
